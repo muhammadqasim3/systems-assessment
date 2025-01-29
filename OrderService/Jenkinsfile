@@ -1,0 +1,44 @@
+pipeline {
+    agent any
+    tools {
+        maven 'maven-3.9.9'
+    }
+    environment {
+        SONARQUBE_URL = 'http://sonarqube.irdresearch.org:9000'
+        SONARQUBE_TOKEN = credentials('sonarqube-token')
+        GITLAB_CREDENTIALS = credentials('gitlab-credentials')
+    }
+    stages {
+        stage('Clone Repository') {
+            steps {
+                git credentialsId: 'gitlab-credentials', branch: 'main', url: 'http://10.0.0.30/unfepi/zm-care.git'
+            }
+        }
+        stage('Build with Maven') {
+            steps {
+                sh 'java -version'
+                sh 'mvn clean install -Dmaven.test.skip'
+            }
+        }
+        stage('SonarQube Analysis') {
+            steps {
+                script {
+                    withSonarQubeEnv('Sonarqube-Server') {
+                        sh "mvn clean verify sonar:sonar -Dmaven.test.skip -Dsonar.host.url=${SONARQUBE_URL} -Dsonar.login=${SONARQUBE_TOKEN} -Dsonar.projectKey=unfepi_zm-care_AZII0uciutiMKnw_fZKB"
+                    }
+                }
+            }
+        }
+        stage('Quality Gate') {
+            steps {
+                waitForQualityGate abortPipeline: true
+            }
+        } 
+    }
+
+    post {
+        always {
+            cleanWs()
+        }
+    }
+}

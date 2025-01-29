@@ -1,0 +1,33 @@
+workflow:
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $CI_COMMIT_BRANCH   == "main"'
+    - if: '$CI_PIPELINE_SOURCE == "push"                && $CI_COMMIT_BRANCH   == "main"'
+
+
+# Define the Docker image to use as the runner
+image: maven:3.9.9-ibmjava-8-customized
+
+variables:
+  MAVEN_CLI_OPTS: "-s .m2/pom.xml --batch-mode"
+  MAVEN_OPTS: "-Dmaven.repo.local=.m2/repository"
+
+
+cache:
+  key: maven-cache
+  paths:
+    - .m2/repository/
+
+
+# Stages of the pipeline
+stages:
+  - populate_build_deploy
+
+
+populate_build_deploy:
+  stage: populate_build_deploy
+  script:
+    - mvn clean install -Dmaven.test.skip
+    - ls -lh ./target
+    - sshpass -p $ZMTEST_DEPLOY_PASSWORD rsync -avz -e "ssh -o StrictHostKeyChecking=no" ./target/zmcare-0.0.1-SNAPSHOT.jar zmdev@10.0.0.31:/home/zmdev/zmcare-0.0.1-SNAPSHOT.jar
+    - timeout --preserve-status 20s sshpass -p $ZMTEST_DEPLOY_PASSWORD ssh -o StrictHostKeyChecking=no zmdev@10.0.0.31 "sudo /home/zmdev/scripts/deploy-zmcare.sh > /home/zmdev/deploy.log 2>&1 &"
+
